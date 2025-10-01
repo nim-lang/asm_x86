@@ -424,6 +424,30 @@ proc generateObjectFile*(buf: var Buffer): seq[byte] =
       strtab.add(byte(c))
     strtab.add(0.byte)  # Null terminator
 
+  # Find section indices for linking and update symbol section indices
+  var strtabIndex = 0u32
+  var symtabIndex = 0u32
+  var textIndex = 0u32
+  for i, sec in buf.sections:
+    if sec.name == ".strtab":
+      strtabIndex = uint32(i + 1)  # +1 for null section header
+    elif sec.name == ".symtab":
+      symtabIndex = uint32(i + 1)  # +1 for null section header
+    elif sec.name == ".text":
+      textIndex = uint32(i + 1)  # +1 for null section header
+
+  # Update symbol section indices to point to correct sections
+  for i, sym in buf.symbols:
+    if sym.symbolType == stFunc:
+      # Function symbols should point to .text section
+      buf.symbols[i].section = int(textIndex - 1)  # Convert back to 0-based index
+    elif sym.symbolType == stObject:
+      # Object symbols should point to .data section
+      for j, sec in buf.sections:
+        if sec.name == ".data":
+          buf.symbols[i].section = j
+          break
+
   # Create symbol table entries
   var symtab: seq[byte] = @[]
 
@@ -492,17 +516,6 @@ proc generateObjectFile*(buf: var Buffer): seq[byte] =
   # Null section header
   sectionHeaders.add(createSectionHeader("", stNull, 0, 0, 0))
 
-  # Find section indices for linking
-  var strtabIndex = 0u32
-  var symtabIndex = 0u32
-  var textIndex = 0u32
-  for i, sec in buf.sections:
-    if sec.name == ".strtab":
-      strtabIndex = uint32(i + 1)  # +1 for null section header
-    elif sec.name == ".symtab":
-      symtabIndex = uint32(i + 1)  # +1 for null section header
-    elif sec.name == ".text":
-      textIndex = uint32(i + 1)  # +1 for null section header
 
   # Section headers for each section
   for i, sec in buf.sections:
